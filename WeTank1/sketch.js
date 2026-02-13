@@ -4,14 +4,19 @@
 
 // global vars
 let gameState;
+let frameRate = 0;
+let avgTime = 0;
+let bgBuffer;
 
 let tankBG;
 let missionBanner;
 let weFont
+let cursor
 function preload(){
     tankBG = loadImage('assets/images/tank_background_billboard_white.png')
     missionBanner = loadImage('assets/images/mission_info.png')
     weFont = loadFont('assets/en_US.ttf')
+    cursor = loadImage('assets/images/cursor_1.png')
 
 }
 
@@ -21,21 +26,20 @@ function setup() {
   
   // initialize
   gameState = "missionbrief"
+  bgBuffer = createGraphics(width+64,height+64)
+  bgBuffer.tint("#E7E6B3");
+  for(let i = 0; i < floor(width/64) + 2; i++){
+    for(let j = 0; j < floor(height/64) + 2; j++){
+      bgBuffer.image(tankBG, i * 64, j * 64);
+    }
+  }
 }
 
 function draw() {
     background("red"); // should never be seen.
     switch (gameState) {
         case "missionbrief":
-            push()
-            translate(frameCount%64, frameCount%64)
-            tint("#E7E6B3")
-            for(let i = -1; i<floor(width/64)+1; i++){
-                for(let j = -1; j<floor(width/64)+1; j++){
-                    image(tankBG, 0+i*64, 0+j*64)
-                } 
-            } 
-            pop()
+            image(bgBuffer, frameCount%64-64, -frameCount%64)
             push()
             tint("#C04736");
             for(let i = 0; i < 5; i++){
@@ -70,4 +74,26 @@ function draw() {
             break;
 
     }
+
+    // render cursor (is it always on?)
+    push()
+    tint('#096EE7')
+    image(cursor, mouseX-15, mouseY-15, 30, 30)
+    pop()
+
+
+
+    // frameRate
+    if (frameCount % 10 == 0){
+        frameRate = floor( (10 / avgTime) * 1000)
+        avgTime = 0
+    } else {
+        avgTime += deltaTime;
+    }
+    noStroke();
+    fill("green")
+    textSize(12)
+    text(frameRate, 12,12);
+
+
 }
