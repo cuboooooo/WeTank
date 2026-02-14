@@ -12,27 +12,60 @@
 // then i say improve the visual quality of the level and the gameplay elements
 
 // global vars
+let app;
+
 let gameState;
+let frameCount = 0
 let cframeRate = 0;
 let avgTime = 0;
-let bgBuffer;
+let lastTime = performance.now();
 
-let tankBG;
-let missionBanner;
-let weFont
-let cursor
-function preload(){
-    tankBG = loadImage('assets/images/tank_background_billboard_white.png')
-    missionBanner = loadImage('assets/images/mission_info.png')
-    weFont = loadFont('assets/en_US.ttf')
-    cursor = loadImage('assets/images/cursor_1.png')
+let bgContainer;
+let missionContainer;
+let cursorSprite;
+let fpsText;
+
+let tankBGTexture;
+let missionBannerTexture
+let cursorTexture
+
+async function init() {
+    // i hope pixi is as easy as p5 lmao
+    app = new PIXI.Application();
+    await app.init({
+        width: 854,
+        height: 480,
+        backgroundColor: 0xff0000 // red, shouldnt be seen.
+    })
+}
+
+document.querySelector('main').appendChild(app.canvas);
+
+await loadAssets();
+
+gameState = "missionbrief"; // initial launch state, will be changed.
+
+setupScene(); // guess what this function does!
+
+app.ticker.add(gameLoop);
+
+async function loadAssets(){ // akin to preload() in p5
+    tankBGTexture = await PIXI.Assets.load('assets/images/tank_background_billboard_white.png')
+    missionBannerTexture = await PIXI.Assets.load('assets/images/mission_info.png')
+    cursorTexture = await PIXI.Assets.load('assets/images/cursor_1.png')
+
+    // fonts are weirder
+    await PIXI.Assets.load({
+        alias: "weFont",
+        src: 'assets/en_US.ttf'
+    });
 
 }
 
-function setup() {
-  createCanvas(854, 480);
-  textFont(weFont);
-  frameRate(60)
+function setupMissionBrief() { // combine the tank bg and mission brief into one container.
+    // only separete containers if you need diff update logic, diff z ordering, or if parts are reused.
+    bgContainer = new PIXI.Container();
+    app.stage.addChild(bgContainer);
   
   // initialize
   gameState = "missionbrief"
