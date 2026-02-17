@@ -15,6 +15,13 @@
 let app;
 
 let gameState;
+
+let currMission = {
+    number: 1,
+    enemyTanks: 1
+}
+
+let scenes = {};
 let frameCount = 0
 let cframeRate = 0;
 let avgTime = 0;
@@ -35,19 +42,103 @@ async function init() {
     await app.init({
         width: 854,
         height: 480,
-        backgroundColor: 0xff0000 // red, shouldnt be seen.
+        backgroundColor: 0xf0f000 // yellow, shouldnt be seen.
     })
+
+    document.querySelector('main').appendChild(app.canvas);
+
+    await loadAssets();
+
+    gameState = "missionbrief"; // initial launch state, will be changed.
+
+    setupMissionBrief(); // guess what this function does!
+
+    app.ticker.add(gameLoop); // run the gameloop every frame
+    app.ticker.maxFPS = 60;
+
+
+    // global graphics (always there)
+
+    // fps counter
+    fpsText = new PIXI.Text({
+        // text will be added in gameLoop
+        style: {
+        fontSize: 12,
+        fill: 0x009900
+        }
+    });
+    fpsText.x = 12;
+    fpsText.y = 12;
+    app.stage.addChild(fpsText);
+    
+    // hide cursor
+    app.stage.cursor = 'none'
+
+    // display cursor 
+    const invertFilter = new PIXI.ColorMatrixFilter();
+    invertFilter.matrix = [
+        -1,  0,  0,  0,  1,  
+        0, -1,  0,  0,  1, 
+        0,  0, -1,  0,  1,  
+        0,  0,  0,  1,  0   // unchanged alpha
+    ]; // standard negating matrix
+
+    const tempSprite = new PIXI.Sprite(cursorTexture);
+    tempSprite.filters = [invertFilter];
+    const invertedTexture = app.renderer.generateTexture(tempSprite);
+
+    cursorSprite = new PIXI.Sprite(cursorTexture);
+    cursorSprite.anchor.set(0.5);
+    cursorSprite.scale.set(0.6)
+
+    let cursorMask = new PIXI.Sprite(invertedTexture);
+    cursorMask.filters = [invertFilter];
+    cursorMask.anchor.set(0.5);
+    cursorMask.scale.set(0.6)
+
+    // now we want the BLACK in the sprite to MASK a MOVING gradient.
+    const gradient = new PIXI.Graphics();
+    gradient.rect(-cursorSprite.width/2,-cursorSprite.height,cursorSprite.width,cursorSprite.height*2);
+    gradient.fill(new PIXI.FillGradient({
+        type: 'linear',
+        start: {x: 0, y: 0},
+        end: {x: 0, y: 1},
+        colorStops: [
+            { offset: 0.0, color: 0x0000ff },
+            { offset: 0.25, color: 0x00ffff },
+            { offset: 0.5, color: 0x0000ff },
+            { offset: 0.75, color: 0x00ffff },
+            { offset: 1.0, color: 0x0000ff },
+        ]
+    })) // updated in gameLoop
+    const gradientTexture = app.renderer.generateTexture(gradient);
+    const gradientSprite = new PIXI.Sprite(gradientTexture);
+    gradientSprite.anchor.set(0.5)
+
+    gradientSprite.setMask({mask: cursorMask})
+
+    app.stage.addChild(cursorMask); // the gradient
+    app.stage.addChild(cursorSprite);
+    app.stage.addChild(gradientSprite);
+    // right now its masking out the white, and keeping the black normal...
+
+
+    
+    app.stage.cursorMask = cursorMask; // can access these references later.
+    app.stage.gradientSprite = gradientSprite;
+    
+
+
+    app.stage.eventMode = 'static';
+    app.stage.hitArea = app.screen;
+    app.stage.on('pointermove', (e) => {
+        const {x,y} = e.global;
+        cursorSprite.position.set(x, y);
+        cursorMask.position.set(x, y);
+        gradientSprite.position.set(x, y);
+    })
+
 }
-
-document.querySelector('main').appendChild(app.canvas);
-
-await loadAssets();
-
-gameState = "missionbrief"; // initial launch state, will be changed.
-
-setupScene(); // guess what this function does!
-
-app.ticker.add(gameLoop);
 
 async function loadAssets(){ // akin to preload() in p5
     tankBGTexture = await PIXI.Assets.load('assets/images/tank_background_billboard_white.png')
@@ -64,79 +155,128 @@ async function loadAssets(){ // akin to preload() in p5
 
 function setupMissionBrief() { // combine the tank bg and mission brief into one container.
     // only separete containers if you need diff update logic, diff z ordering, or if parts are reused.
+    scenes.missionbrief = new PIXI.Container();
+    app.stage.addChild(scenes.missionbrief);
+    // create a conrtrainer for the tank bg, and the mission banner
     bgContainer = new PIXI.Container();
-    app.stage.addChild(bgContainer);
-  
-  // initialize
-  gameState = "missionbrief"
-  bgBuffer = createGraphics(width+64,height+64)
-  bgBuffer.tint("#E7E6B3");
-  for(let i = 0; i < floor(width/64) + 2; i++){
-    for(let j = 0; j < floor(height/64) + 2; j++){
-      bgBuffer.image(tankBG, i * 64, j * 64);
+    const tilesX = Math.floor(app.screen.width / 64) + 2;
+    const tilesY = Math.floor(app.screen.height / 64) + 2;
+    // 64x64 is the size of the tank background tile piece.
+    // +2 is to allow "infinite" scrolling.
+
+    for (let i = 0; i < tilesX; i++) {
+        for (let j = 0; j < tilesY; j++) {
+            const tile = new PIXI.Sprite(tankBGTexture);
+            tile.tint = 0xE7E6B3; // the sprites are greyscale.
+            tile.x = i * 64;
+            tile.y = j*64;
+            bgContainer.addChild(tile);
     }
-  }
+}
+    //done with scrolliong tank background
+    scenes.missionbrief.addChild(bgContainer);
+    
+    // now construct the mission banner on top
+    // this will evenatully need to be variable, for different mission levels
+
+    for (let i = 0; i < 5; i++){
+        const banner = new PIXI.Sprite(missionBannerTexture)
+        banner.tint = 0xC04736;
+        banner.y = (app.screen.height / 5) + i * app.screen.height/11; // i think its 47 cuz thats half of 96, its height. i lowk nudged it until it looped perfectly.
+        banner.width = app.screen.width;
+        banner.height = app.screen.width/14; // this kept it square.
+        scenes.missionbrief.addChild(banner);
+    }
+    // banner texture, do text.
+    const titleShadow = new PIXI.Text({
+        text: `Mission ${currMission.number}`,
+        style: {
+            fontFamily: 'weFont',
+            fontSize: 52,
+            fill: 0x973627
+            // EVENTUALLY ADD CUSTOM SPACING
+        }
+    })
+    titleShadow.anchor.set(0.5) // position by center 
+    titleShadow.x = app.screen.width / 2 + (app.screen.height / 60);
+    titleShadow.y = app.screen.height / 5 + (app.screen.height / 8) + app.screen.height / 60;
+    // trying to avoid hardcoded values in case i want variable screen size.
+    scenes.missionbrief.addChild(titleShadow);
+
+    const title = new PIXI.Text({
+        text: `Mission ${currMission.number}`,
+        style: {
+            fontFamily: 'weFont',
+            fontSize: 52, // make variable
+            fill: 0xFAE59F,
+            stroke: {color: 0x634921, width : 8} // make variable
+            // EVENTUALLY ADD CUSTOM SPACING
+        }
+    })
+    title.anchor.set(0.5);
+    title.x = app.screen.width / 2;
+    title.y = app.screen.height / 5 + app.screen.height / 8;
+    scenes.missionbrief.addChild(title);
+
+    const enemyText = new PIXI.Text({
+        text: `Enemy Tanks: ${currMission.enemyTanks}`,
+        style: {
+            fontFamily: 'weFont',
+            fontSize: 32,
+            fill: 0xFAE59F,
+            stroke: { color: 0x634921, width: 8 }
+        }
+    });
+    enemyText.anchor.set(0.5);
+    enemyText.x = app.screen.width / 2;
+    enemyText.y = (app.screen.height / 5) + (app.screen.height / 3);
+    scenes.missionbrief.addChild(enemyText);  // so much for some lines of text damn
+
+    // gold bars 
+    const topBar = new PIXI.Graphics();
+    topBar.rect(0, (app.screen.height / 5)  // where banner element starts
+    + app.screen.height / 60, // plus the gap
+     app.screen.width, app.screen.height / 40);
+    topBar.fill(0xCCA82A);
+    scenes.missionbrief.addChild(topBar);
+    
+    const bottomBar = new PIXI.Graphics();
+    bottomBar.rect(0, 
+        (app.screen.width/14 * 5) // height of the banner element
+        - app.screen.height / 60 // minus the gap
+        + app.screen.height / 40, // minus the width of the bar
+         app.screen.width, app.screen.height / 40);
+    bottomBar.fill(0xCCA82A);
+    scenes.missionbrief.addChild(bottomBar);
 }
 
-function draw() {
-    background("red"); // should never be seen.
-    switch (gameState) {
-        case "missionbrief":
-            image(bgBuffer, frameCount%64-64, -frameCount%64)
-            push()
-            tint("#C04736");
-            for(let i = 0; i < 5; i++){
-                image(missionBanner, 0, (height/5)+i*47, width, 67)
-            }
-            pop()// pop tint
-            noStroke()
-            fill("#CCA82A")
-            rect(0,(height/5)+height/60,width,(height/40))
-            rect(0,(67*5)-height/60,width,(height/40))
-            
-            // 3 words.
-            fill("#973627")
-            textAlign(CENTER,CENTER)
-            textSize(52)
-            text("Mission 1", width/2+(height/60), (height/5)+(height/8)+height/60)
-            stroke("#634921")
-            strokeWeight(8)
-            fill("#FAE59F")
-            text("Mission 1", width/2, (height/5)+(height/8))
+function gameLoop(ticker) {
+    frameCount++;
 
-            noStroke()
-            fill("#973627")
-            textAlign(CENTER,CENTER)
-            textSize(32)
-            text("Enemy Tanks: 1", width/2+(height/60), (height/5)+(height/3)+height/60)
-            stroke("#634921")
-            strokeWeight(8)
-            fill("#FAE59F")
-            text("Enemy Tanks: 1", width/2, (height/5)+(height/3))
+    // background scroll ( IF GAME STATE MISSION BRIEF )
+    bgContainer.x = frameCount%64 - 64
+    bgContainer.y = -frameCount%64
 
-            break;
-
+    if (app.stage.gradientSprite) {
+        const gradientSprite = app.stage.gradientSprite;
+        const progress = (frameCount%100)/100 // progress = 0-99%
+        gradientSprite.y = cursorSprite.y-cursorSprite.height/2 + progress*cursorSprite.width;
     }
 
-    // render cursor (is it always on?)
-    push()
-    tint('#096EE7')
-    image(cursor, mouseX-15, mouseY-15, 30, 30)
-    pop()
-
-
-
-    // frameRate
-    if (frameCount % 10 == 0){
-        cframeRate = floor( (10 / avgTime) * 1000)
+    //update fps counter
+    const currentTime = performance.now();
+    const deltaTime = currentTime - lastTime;
+    lastTime = currentTime;
+    if (frameCount % 10 == 0) {
+        cframeRate = Math.floor(10/avgTime * 1000);
         avgTime = 0
+        fpsText.text = cframeRate.toString();
     } else {
-        avgTime += deltaTime;
+        avgTime += deltaTime
     }
-    noStroke();
-    fill("green")
-    textSize(12)
-    text(cframeRate, 12,12);
 
-
+    // idk. game logic stuff.
 }
+
+init();
+
