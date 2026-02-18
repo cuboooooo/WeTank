@@ -3,7 +3,10 @@
 
 
 // TODO:
-// cursor trail and visuals
+// cursor trail
+// FONT 
+
+
 // bottom scoreboard
 // maybe a home screen i guess.
 // make helper functions for font rendering for custom spacing? it might be expensive to render letter by letter
@@ -26,6 +29,7 @@ let frameCount = 0
 let cframeRate = 0;
 let avgTime = 0;
 let lastTime = performance.now();
+let cursorPoints = [];
 
 let bgContainer;
 let missionContainer;
@@ -91,6 +95,16 @@ async function init() {
     cursorSprite.anchor.set(0.5);
     cursorSprite.scale.set(0.6)
 
+    let cursorSpriteBlur = new PIXI.Sprite(cursorTexture);
+    cursorSpriteBlur.anchor.set(0.5);
+    cursorSpriteBlur.scale.set(0.6)
+
+    cursorSpriteBlur.filters = [new PIXI.BlurFilter({
+        strength: 0.25,
+        quality: 4,
+        kernelSize: 5,
+    })]
+
     let cursorMask = new PIXI.Sprite(invertedTexture);
     cursorMask.filters = [invertFilter];
     cursorMask.anchor.set(0.5);
@@ -105,9 +119,13 @@ async function init() {
         end: {x: 0, y: 1},
         colorStops: [
             { offset: 0.0, color: 0x0000ff },
-            { offset: 0.25, color: 0x00ffff },
+            { offset: 0.125, color: 0x00ffff },
+            { offset: 0.25, color: 0x0000ff },
+            { offset: 0.375, color: 0x00ffff },
             { offset: 0.5, color: 0x0000ff },
-            { offset: 0.75, color: 0x00ffff },
+            { offset: 0.625, color: 0x00ffff },
+            { offset: 0.75, color: 0x0000ff },
+            { offset: 0.875, color: 0x00ffff },
             { offset: 1.0, color: 0x0000ff },
         ]
     })) // updated in gameLoop
@@ -119,8 +137,8 @@ async function init() {
 
     app.stage.addChild(cursorMask); // the gradient
     app.stage.addChild(cursorSprite);
+    app.stage.addChild(cursorSpriteBlur); // might be COMPLETELY uneccesary.
     app.stage.addChild(gradientSprite);
-    // right now its masking out the white, and keeping the black normal...
 
 
     
@@ -136,7 +154,39 @@ async function init() {
         cursorSprite.position.set(x, y);
         cursorMask.position.set(x, y);
         gradientSprite.position.set(x, y);
+        cursorSpriteBlur.position.set(x, y);
+
     })
+
+    // make cursor tail
+    const tailWidth = 256; //2
+    const tailHeight = 8; //8
+    const tailGraphic = new PIXI.Graphics();
+    // adds taper
+    tailGraphic.moveTo(tailWidth, tailHeight / 2);//tailHeight/tailWidth, tailHeight/tailWidth
+    tailGraphic.lineTo(0, tailHeight);
+    tailGraphic.lineTo(0, 0);
+    tailGraphic.closePath();
+    tailGraphic.fill(new PIXI.FillGradient({
+        type: 'linear',
+        start: { x: 0, y: 0 },
+        end: { x: 1, y: 0 },
+        colorStops: [
+            { offset: 0.0, color: 0xddf2ff, alpha: 1 },// 1/6th of the way between white and cyan
+            { offset: 1.0, color: 0x34c2ec, alpha: 0 } // 1/6th of the way between cyan and black
+        ]
+    }));
+    
+    const tailTexture = app.renderer.generateTexture(tailGraphic);
+    const historySize = 12;
+    cursorPoints = []
+    for (let i = 0; i < historySize; i++){
+        cursorPoints.push(new PIXI.Point(0+i*0.1,0+i*0.1));
+    }
+    const rope = new PIXI.MeshRope({texture: tailTexture, points: cursorPoints});
+    //rope.blendMode = "add";
+
+    app.stage.addChild(rope);
 
 }
 
@@ -145,11 +195,12 @@ async function loadAssets(){ // akin to preload() in p5
     missionBannerTexture = await PIXI.Assets.load('assets/images/mission_info.png')
     cursorTexture = await PIXI.Assets.load('assets/images/cursor_1.png')
 
-    // fonts are weirder
-    await PIXI.Assets.load({
-        alias: "weFont",
-        src: 'assets/en_US.ttf'
-    });
+    const font = new FontFace( // YOURE a font face
+        'weFont',
+        'url(assets/en_US.ttf)'
+    );
+    await font.load();
+    document.fonts.add(font);
 
 }
 
@@ -192,9 +243,9 @@ function setupMissionBrief() { // combine the tank bg and mission brief into one
         text: `Mission ${currMission.number}`,
         style: {
             fontFamily: 'weFont',
-            fontSize: 52,
-            fill: 0x973627
-            // EVENTUALLY ADD CUSTOM SPACING
+            fontSize: (52/854)*app.screen.width, 
+            fill: 0x973627,
+            letterSpacing: (10/854)*app.screen.width,
         }
     })
     titleShadow.anchor.set(0.5) // position by center 
@@ -207,10 +258,11 @@ function setupMissionBrief() { // combine the tank bg and mission brief into one
         text: `Mission ${currMission.number}`,
         style: {
             fontFamily: 'weFont',
-            fontSize: 52, // make variable
+            fontSize: (52/854)*app.screen.width, 
             fill: 0xFAE59F,
-            stroke: {color: 0x634921, width : 8} // make variable
-            // EVENTUALLY ADD CUSTOM SPACING
+            stroke: {color: 0x634921, width : (8/854)*app.screen.width},
+            letterSpacing: (10/854)*app.screen.width,
+            //LineJoin: 'round', miterLevel: 5, // NEVER WORKED???
         }
     })
     title.anchor.set(0.5);
@@ -222,9 +274,10 @@ function setupMissionBrief() { // combine the tank bg and mission brief into one
         text: `Enemy Tanks: ${currMission.enemyTanks}`,
         style: {
             fontFamily: 'weFont',
-            fontSize: 32,
+            fontSize: (32/854)*app.screen.width, 
             fill: 0xFAE59F,
-            stroke: { color: 0x634921, width: 8 }
+            stroke: {color: 0x634921, width : (8/854)*app.screen.width},
+            letterSpacing: (6.15/854)*app.screen.width,
         }
     });
     enemyText.anchor.set(0.5);
@@ -254,12 +307,12 @@ function gameLoop(ticker) {
     frameCount++;
 
     // background scroll ( IF GAME STATE MISSION BRIEF )
-    bgContainer.x = frameCount%64 - 64
-    bgContainer.y = -frameCount%64
+    bgContainer.x = (frameCount/2)%64 - 64
+    bgContainer.y = -(frameCount/2)%64
 
     if (app.stage.gradientSprite) {
         const gradientSprite = app.stage.gradientSprite;
-        const progress = (frameCount%100)/100 // progress = 0-99%
+        const progress = (frameCount/2%100)/100 // progress = 0-99%
         gradientSprite.y = cursorSprite.y-cursorSprite.height/2 + progress*cursorSprite.width;
     }
 
@@ -273,6 +326,12 @@ function gameLoop(ticker) {
         fpsText.text = cframeRate.toString();
     } else {
         avgTime += deltaTime
+    }
+
+    if (frameCount % 2 == 0) { // add that chunkiness.
+        cursorPoints.pop();
+        cursorPoints.unshift(new PIXI.Point(cursorSprite.x, cursorSprite.y));
+
     }
 
     // idk. game logic stuff.
