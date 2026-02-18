@@ -13,8 +13,12 @@
 // modular level design system
 // THEN move into core gameplay, moving, shooting, mining
 // then i say improve the visual quality of the level and the gameplay elements
+// its taking 300ms to load the first graphic currently. for reference most frames are about 3ms if unclamped.
+
+
 
 // global vars
+
 let app;
 
 let gameState;
@@ -29,6 +33,7 @@ let frameCount = 0
 let cframeRate = 0;
 let avgTime = 0;
 let lastTime = performance.now();
+let load = true;
 let cursorPoints = [];
 
 let bgContainer;
@@ -39,6 +44,8 @@ let fpsText;
 let tankBGTexture;
 let missionBannerTexture
 let cursorTexture
+
+
 
 async function init() {
     // i hope pixi is as easy as p5 lmao
@@ -159,9 +166,11 @@ async function init() {
     })
 
     // make cursor tail
-    const tailWidth = 256; //2
+    const tailWidth = 256; //256
     const tailHeight = 8; //8
     const tailGraphic = new PIXI.Graphics();
+    const tailGraphic2 = new PIXI.Graphics(); // cant have 2 gradients on one obj, so i used two. lol.
+    const tailContainer = new PIXI.Container();
     // adds taper
     tailGraphic.moveTo(tailWidth, tailHeight / 2);//tailHeight/tailWidth, tailHeight/tailWidth
     tailGraphic.lineTo(0, tailHeight);
@@ -172,19 +181,48 @@ async function init() {
         start: { x: 0, y: 0 },
         end: { x: 1, y: 0 },
         colorStops: [
-            { offset: 0.0, color: 0xddf2ff, alpha: 1 },// 1/6th of the way between white and cyan
-            { offset: 1.0, color: 0x34c2ec, alpha: 0 } // 1/6th of the way between cyan and black
+            { offset: 0.0, color: '#f2faffb4' },// 1/6th of the way between white and cyan
+            { offset: 0.3, color: '#00c3ff88' }, // 1/6th of the way between cyan and black
+            { offset: 1.0, color: '#0099c800' },
         ]
     }));
+
+    tailGraphic2.moveTo(tailWidth, tailHeight / 2);//tailHeight/tailWidth, tailHeight/tailWidth
+    tailGraphic2.lineTo(0, tailHeight);
+    tailGraphic2.lineTo(0, 0);
+    tailGraphic2.closePath();
+    tailGraphic2.fill(new PIXI.FillGradient({
+        type: 'linear',
+        start: { x: 0, y: 0 },
+        end: { x: 0, y: 1 },
+        colorStops: [
+            { offset: 0.0, color: '#0008' },
+            { offset: 0.3, color: '#fff0' },
+            { offset: 0.7, color: '#fff0' },
+            { offset: 1.0, color: '#0008' } 
+        ]
+    }));
+    tailGraphic2.blendMode = 'normal';
+    // should i be destroying the gradients after use?
     
-    const tailTexture = app.renderer.generateTexture(tailGraphic);
+    // tailGraphic.x=30
+    // tailGraphic2.x=30
+    // tailGraphic.y=30                 // debug trail
+    // tailGraphic2.y=30
+    // app.stage.addChild(tailGraphic)
+    // app.stage.addChild(tailGraphic2)
+    
+    tailContainer.addChild(tailGraphic);
+    tailContainer.addChild(tailGraphic2);
+    const finalTailTexture = app.renderer.generateTexture(tailContainer);
     const historySize = 12;
     cursorPoints = []
     for (let i = 0; i < historySize; i++){
         cursorPoints.push(new PIXI.Point(0+i*0.1,0+i*0.1));
     }
-    const rope = new PIXI.MeshRope({texture: tailTexture, points: cursorPoints});
-    //rope.blendMode = "add";
+    const rope = new PIXI.MeshRope({texture: finalTailTexture, points: cursorPoints});
+    
+    //rope.blendMode = "screen";
 
     app.stage.addChild(rope);
 
@@ -232,6 +270,9 @@ function setupMissionBrief() { // combine the tank bg and mission brief into one
 
     for (let i = 0; i < 5; i++){
         const banner = new PIXI.Sprite(missionBannerTexture)
+        const cm = new PIXI.ColorMatrixFilter()
+        cm.contrast(0.125, false) // something aint working here
+        banner.filters = [cm] // lowers contrast of banner image.
         banner.tint = 0xC04736;
         banner.y = (app.screen.height / 5) + i * app.screen.height/11; // i think its 47 cuz thats half of 96, its height. i lowk nudged it until it looped perfectly.
         banner.width = app.screen.width;
@@ -305,6 +346,11 @@ function setupMissionBrief() { // combine the tank bg and mission brief into one
 
 function gameLoop(ticker) {
     frameCount++;
+
+    if (load == true){
+        console.log(`${performance.now() - lastTime} milliseconds to load`)
+        load = false;
+    }
 
     // background scroll ( IF GAME STATE MISSION BRIEF )
     bgContainer.x = (frameCount/2)%64 - 64
