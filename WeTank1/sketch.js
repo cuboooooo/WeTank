@@ -3,13 +3,13 @@
 
 
 // TODO:
-// cursor trail
-// FONT 
+// enemy tanks needs less stroke and a shadow
+// diamond board NEEDS to be less dark.
+// trail needs to be more transparent, have slight borders 
+// bottom scoreboard ( tank icon, mii, x, lives)
 
 
-// bottom scoreboard
 // maybe a home screen i guess.
-// make helper functions for font rendering for custom spacing? it might be expensive to render letter by letter
 // modular level design system
 // THEN move into core gameplay, moving, shooting, mining
 // then i say improve the visual quality of the level and the gameplay elements
@@ -271,7 +271,7 @@ function setupMissionBrief() { // combine the tank bg and mission brief into one
     scenes.missionbrief.addChild(title);
 
     const enemyText = new PIXI.Text({
-        text: `Enemy Tanks: ${currMission.enemyTanks}`,
+        text: `Enemy tanks: ${currMission.enemyTanks}`,
         style: {
             fontFamily: 'weFont',
             fontSize: (32/854)*app.screen.width, 
